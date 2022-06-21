@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.pushtechnology.diffusion.performance</groupId>
+  <artifactId>topic-set-tests</artifactId>
+  <version>${revision}</version>
+
+  <properties>
+    <semanticVersion>0.1.0</semanticVersion>
+
+    <ciBuild>0</ciBuild>
+    <revisionCiBuildPrefix>-</revisionCiBuildPrefix>
+    <revisionCiBuild>${ciBuild}</revisionCiBuild>
+
+    <sha1>DEVELOPER</sha1>
+    <revisionSha1Prefix>.</revisionSha1Prefix>
+    <revisionSha1>${sha1}</revisionSha1>
+
+    <changelist>-SNAPSHOT</changelist>
+    <revisionChangelist>${changelist}</revisionChangelist>
+
+    <revision>
+      ${semanticVersion}${revisionCiBuildPrefix}${revisionCiBuild}${revisionSha1Prefix}${revisionSha1}${revisionChangelist}
+    </revision>
+
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <java.version>11</java.version>
+    <maven.compiler.source>${java.version}</maven.compiler.source>
+    <maven.compiler.target>${java.version}</maven.compiler.target>
+
+    <diffusion-client.version>6.8.3</diffusion-client.version>
+  </properties>
+
+  <repositories>
+    <repository>
+      <id>push-repository</id>
+      <url>https://download.pushtechnology.com/maven/</url>
+    </repository>
+  </repositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.pushtechnology.diffusion</groupId>
+      <artifactId>diffusion-client-with-dependencies</artifactId>
+      <version>${diffusion-client.version}</version>
+      <type>jar</type>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.pushtechnology.topicsettest.TopicSetTest</mainClass>
+            </manifest>
+          </archive>
+          <descriptorRefs>
+            <descriptorRef>jar-with-dependencies</descriptorRef>
+          </descriptorRefs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <source>11</source>
+          <target>11</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+</project>

@@ -23,7 +23,7 @@ e.g.
 ```
 java -jar target/topic-set-tests-0.1.0-0.DEVELOPER-SNAPSHOT-jar-with-dependencies.jar \
      ws://localhost:8090 \
-     10000000
+     10000000 \
      1
 ```
 

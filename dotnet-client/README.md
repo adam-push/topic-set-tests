@@ -9,3 +9,4 @@ Edit `Program.cs` to chose one of two update techniques:
 1. `SetAllTopics(...)` will update topics as fast as possible
 2. `SetAllTopicsThrottled(..., outstandingUpdates)` will only allow `outstandingUpdates` to go unacknowledged before sending more updates. This appears to increase throughput, depending on the size of `outstandingUpdates`. Good values for this appear to be around 100, although your environment may be an influencing factor.
 
+You will also have to edit the code to specify how to connect to your particular Diffusion server (Principal, Password and URL).

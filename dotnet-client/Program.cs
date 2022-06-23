@@ -16,7 +16,7 @@ namespace dotnet_test
 {
     class Program
     {
-        const int dflt_iterations = 10_000_000;
+        const int dflt_iterations = 1_000_000;
         const int dflt_numTopics = 100;
         const string filler = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
             + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -46,12 +46,14 @@ namespace dotnet_test
                 var spec = Diffusion.NewSpecification(TopicType.BINARY)
                     .WithProperty(TopicSpecificationProperty.PublishValuesOnly, "true");
                 
-                String topicPath = "test/set/dotnet/" + GetTimeMillis();
-                await AddAllTopics(session, spec, topicPath, dflt_numTopics);
-
+                String topicPath = "test/set/dotnet"; // + "/" + GetTimeMillis();
+                // await AddAllTopics(session, spec, topicPath, dflt_numTopics);
+                await AddOnlyOneTopic(session, spec, "dummy");
+                
                 long startTime = GetTimeMillis();
 
-                await SetAllTopicsThrottled(session, topicPath, dflt_numTopics, dflt_iterations, 50);
+                // await SetAllTopicsThrottled(session, topicPath, dflt_numTopics, dflt_iterations, 50);
+                await SetAllTopics(session, topicPath, dflt_numTopics, dflt_iterations);
                 
                 long endTime = GetTimeMillis();
                 Console.WriteLine("Test took " + (endTime - startTime) + " ms");
@@ -74,6 +76,11 @@ namespace dotnet_test
             return (long)span.TotalMilliseconds;
         }
 
+        private static Task AddOnlyOneTopic(ISession session, ITopicSpecification spec, String topicPath)
+        {
+            return session.TopicControl.AddTopicAsync(topicPath, spec);
+        }
+        
         private static Task AddAllTopics(ISession session, ITopicSpecification spec, String topicPath, int numTopics)
         {
             TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
@@ -81,7 +88,6 @@ namespace dotnet_test
             
             for(var i = 0; i < numTopics; i++) {
                 String topic = topicPath + "/" + i;
-                // Console.WriteLine("Add topic: " + topic);
                 session.TopicControl.AddTopicAsync(topic, spec).ContinueWith(
                     addTask => {
                         if(addTask.Exception != null)

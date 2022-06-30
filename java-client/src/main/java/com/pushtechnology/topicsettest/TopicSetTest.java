@@ -60,29 +60,27 @@ public class TopicSetTest {
         final int numTopics = 100;
         TopicSpecification spec = Diffusion.newTopicSpecification(TopicType.BINARY)
                 .withProperty(TopicSpecification.PUBLISH_VALUES_ONLY, "true");
-        String topicPath = "test/set/java/" + System.currentTimeMillis();
+        String topicPath = "test/set/java"; // + "/" + System.currentTimeMillis();
 
         System.out.println(format("Topic name: %s", topicPath));
         System.out.println(format("Test will run for %s iterations", iterations));
 
-        long startTime;
+        long startTime = System.currentTimeMillis();
 
         switch(testID) {
             case 1:
                 System.out.println("Test 1 - Add topics, then time how long it takes to set() them");
                 addAllTopics(topicControl, spec, topicPath, numTopics).get();
-                // Only start the clock once the topics have been created
+                // Reset the clock once the topics have been created
                 startTime = System.currentTimeMillis();
                 setAllTopics(topicUpdate, topicPath, numTopics, iterations).get();
                 break;
             case 2:
                 System.out.println("Test 2 - Do addAndSet()");
-                startTime = System.currentTimeMillis();
                 addAndSetAllTopics(topicUpdate, topicControl, spec, topicPath, numTopics, iterations).get();
                 break;
             case 3:
                 System.out.println("Test 3 - Use an UpdateStream to add the topic if it doesn't exist and subsequently stream them.");
-                startTime = System.currentTimeMillis();
                 streamAllTopics(topicUpdate, spec, topicPath, numTopics, iterations).get();
                 break;
             default:

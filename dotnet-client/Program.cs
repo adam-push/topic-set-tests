@@ -45,6 +45,8 @@ namespace dotnet_test
         static async Task Run()
         {
             ISession session = null;
+            ISession session2 = null;
+
             try
             {
                 session = Diffusion.Sessions
@@ -53,22 +55,73 @@ namespace dotnet_test
                     .Open(url);
                 Console.WriteLine(session.SessionId);
 
+                session2 = Diffusion.Sessions
+                    .Principal("admin")
+                    .Password("password")
+                    .Open(url);
+
                 var spec = Diffusion.NewSpecification(TopicType.BINARY)
                     .WithProperty(TopicSpecificationProperty.PublishValuesOnly, "true");
 
-                String topicPath = "test/set/dotnet"; // + "/" + GetTimeMillis();
-                // await AddAllTopics(session, spec, topicPath);
-                await AddOnlyOneTopic(session, spec, "dummy");
+                const String topicPath = "test/set/dotnet";
 
                 long startTime = GetTimeMillis();
 
-                // await SetAllTopicsThrottled(session, topicPath, 50);
-                // await SetAllTopics(session, topicPath);
-                await AddAndSetAllTopics(session, spec, topicPath);
+                switch(test_number)
+                {
+                    case 1:
+                        Console.WriteLine("Running test: Add all topics then set them");
+                        await AddAllTopics(session, spec, topicPath);
+
+                        // Reset start time for this test, so we only time the SetAsync() calls
+                        startTime = GetTimeMillis();
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
+
+                        break;
+                    case 2:
+                        Console.WriteLine("Running test: addAndSet()");
+                        await AddAndSetAllTopics(session, spec, topicPath);
+                        break;
+                    case 3:
+                        Console.WriteLine("Not implemented: Use UpdateStreams to update the topics");
+                        break;
+                    case 4:
+                        Console.WriteLine("Running test: Update existing topics");
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        break;
+                    case 5:
+                        Console.WriteLine("Running test: Add a single topic, then set all the others");
+                        await AddOnlyOneTopic(session, spec, "dummy");
+
+                        // Reset start time for this test, so we only time the SetAsync() calls
+                        startTime = GetTimeMillis();
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        break;
+                    case 6:
+                        Console.WriteLine("Running test: Add a single topic in one session, then set the other topics in a different session");
+                        await AddOnlyOneTopic(session, spec, "dummy");
+
+                        // Reset start time for this test, so we only time the SetAsync() calls
+                        startTime = GetTimeMillis();
+                        await SetAllTopics(session2, topicPath, numTopics, iterations);
+                        break;
+                    case 7:
+                        Console.WriteLine("Running test: Create two sessions, and set all topics in only one of them");
+                        // Reset start time for this test, so we only time the SetAsync() calls
+                        startTime = GetTimeMillis();
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        break;
+                    default:
+                        Console.WriteLine("Invalid test number: " + test_number);
+                        break;
+                }
 
                 long endTime = GetTimeMillis();
                 Console.WriteLine("Test took " + (endTime - startTime) + " ms");
                 Console.WriteLine("= " + ((double)iterations / (endTime - startTime) * 1000) + " msgs/sec");
+
+                session?.Close();
+                session2?.Close();
             }
             catch(Exception e)
             {
@@ -141,6 +194,7 @@ namespace dotnet_test
                     }, TaskContinuationOptions.ExecuteSynchronously);
             }
 
+            Console.WriteLine("All topics Set()");
             return tcs.Task;
         }
 

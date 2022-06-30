@@ -83,6 +83,10 @@ public class TopicSetTest {
                 System.out.println("Test 3 - Use an UpdateStream to add the topic if it doesn't exist and subsequently stream them.");
                 streamAllTopics(topicUpdate, spec, topicPath, numTopics, iterations).get();
                 break;
+            case 4:
+                System.out.println("Test 4 - Reuse existing topics, timing how long it takes to set() them");
+                setAllTopics(topicUpdate, topicPath, numTopics, iterations).get();
+                break;
             default:
                 System.out.println("Unknown test " + testID);
                 return;

@@ -126,7 +126,7 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 1_000);
+                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 5_000);
                         break;
                     case 9:
                         Console.WriteLine("Running test: Add all topics, then set them with ordered client-side throttling");
@@ -228,26 +228,38 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static async Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        private static Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
+            var tcs = new TaskCompletionSource<bool>();
+
             var sem = new SemaphoreSlim(outstandingUpdates);
 
-            var tasks = new List<Task>();
+            int completed = 0;
 
             for(var i = 0; i < iterations; i++) {
-                String topic = topicPath + "/" + (i % numTopics);
-                String data = "" + GetTimeMillis() + filler;
+                string topic = topicPath + "/" + (i % numTopics);
+                string data = "" + GetTimeMillis() + filler;
+
                 var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
 
-                await sem.WaitAsync();
+                sem.Wait();
 
-                tasks.Add(Task.Run(async () =>
-                {
-                    await session.TopicUpdate.SetAsync(topic, value);
-                    sem.Release();
-                }));
+                session.TopicUpdate.SetAsync(topic, value).ContinueWith(
+                    setTask => {
+                        if(setTask.Exception != null)
+                        {
+                            Console.WriteLine($"Exception publishing to {topic}: {setTask.Exception}");
+                        }
+                        if(Interlocked.Increment(ref completed) == iterations)
+                        {
+                            Console.WriteLine($"All updates done");
+                            tcs.SetResult(true);
+                        }
+                        sem.Release();
+                    }, TaskContinuationOptions.ExecuteSynchronously);
             }
-            await Task.WhenAll(tasks.ToArray());
+
+            return tcs.Task;
         }
 
         private static Task SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)

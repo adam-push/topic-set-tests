@@ -16,5 +16,7 @@ dotnet run <url> <number of update> <test number>
 5. Add a single topic, then set all the others
 6. Add a single topic in one sessin, then set the other topics in a different session
 7. Create two sessions; set the topics in one of them
+8. Add all topics, then use (unordered) client-side throttling with SetAsync()
+9. Add all topics, then use unordered client-side throttling with SetAsync()
 
 You will also have to edit the code to specify how to connect to your particular Diffusion server (Principal, Password and URL).

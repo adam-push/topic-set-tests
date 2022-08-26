@@ -2,8 +2,12 @@
 using PushTechnology.ClientInterface.Client.Session;
 using PushTechnology.ClientInterface.Client.Topics;
 using PushTechnology.ClientInterface.Client.Topics.Details;
+using PushTechnology.ClientInterface.Client.Callbacks;
+using PushTechnology.ClientInterface.Client.Features.Control.Clients;
+using PushTechnology.ClientInterface.Data.Binary;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
 using System.Threading;
@@ -50,10 +54,17 @@ namespace dotnet_test
             try
             {
                 session = Diffusion.Sessions
+                    .SessionStateChangedHandler((sender, args) => {
+                        Console.WriteLine("Session state changed by " + sender + " to " + args.NewState);
+                        })
+                    .MaximumQueueSize(10_000)
                     .Principal("admin")
                     .Password("password")
                     .Open(url);
                 Console.WriteLine(session.SessionId);
+
+                List<string> requiredProperties = new List<string> { SessionProperty.ALL_FIXED_PROPERTIES, SessionProperty.ALL_USER_PROPERTIES };
+                session.ClientControl.SetSessionPropertiesListener(new SessionPropertiesListener() ,requiredProperties.ToArray());
 
                 session2 = Diffusion.Sessions
                     .Principal("admin")
@@ -99,17 +110,31 @@ namespace dotnet_test
                         break;
                     case 6:
                         Console.WriteLine("Running test: Add a single topic in one session, then set the other topics in a different session");
-                        await AddOnlyOneTopic(session, spec, "dummy");
+                        await AddOnlyOneTopic(session2, spec, "dummy");
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopics(session2, topicPath, numTopics, iterations);
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
                         break;
                     case 7:
                         Console.WriteLine("Running test: Create two sessions, and set all topics in only one of them");
+                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        break;
+                    case 8:
+                        Console.WriteLine("Running test: Add all topics, then set them with unordered client-side throttling");
+                        await AddAllTopics(session, spec, topicPath);
+
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 1_000);
+                        break;
+                    case 9:
+                        Console.WriteLine("Running test: Add all topics, then set them with ordered client-side throttling");
+                        await AddAllTopics(session, spec, topicPath);
+
+                        // Reset start time for this test, so we only time the SetAsync() calls
+                        startTime = GetTimeMillis();
+                        await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 5_000);
                         break;
                     default:
                         Console.WriteLine("Invalid test number: " + test_number);
@@ -143,6 +168,11 @@ namespace dotnet_test
         private static Task AddOnlyOneTopic(ISession session, ITopicSpecification spec, String topicPath)
         {
             return session.TopicControl.AddTopicAsync(topicPath, spec);
+        }
+
+        private static Task RemoveTopics(ISession session, String selector)
+        {
+            return session.TopicControl.RemoveTopicsAsync(selector);
         }
 
         private static Task AddAllTopics(ISession session, ITopicSpecification spec, String topicPath)
@@ -198,7 +228,7 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static async Task SetAllTopicsThrottled(ISession session, String topicPath, int outstandingUpdates)
+        private static async Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var sem = new SemaphoreSlim(outstandingUpdates);
 
@@ -218,6 +248,40 @@ namespace dotnet_test
                 }));
             }
             await Task.WhenAll(tasks.ToArray());
+        }
+
+        private static Task SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+
+            var sem = new SemaphoreQueue(outstandingUpdates);
+
+            int completed = 0;
+
+            for(var i = 0; i < iterations; i++) {
+                string topic = topicPath + "/" + (i % numTopics);
+                string data = "" + GetTimeMillis() + filler;
+
+                var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
+
+                sem.Wait();
+
+                session.TopicUpdate.SetAsync(topic, value).ContinueWith(
+                    setTask => {
+                        if(setTask.Exception != null)
+                        {
+                            Console.WriteLine($"Exception publishing to {topic}: {setTask.Exception}");
+                        }
+                        if(Interlocked.Increment(ref completed) == iterations)
+                        {
+                            Console.WriteLine($"All updates done");
+                            tcs.SetResult(true);
+                        }
+                        sem.Release();
+                    }, TaskContinuationOptions.ExecuteSynchronously);
+            }
+
+            return tcs.Task;
         }
 
         private static Task AddAndSetAllTopics(ISession session, ITopicSpecification spec, String topicPath)
@@ -246,6 +310,41 @@ namespace dotnet_test
             }
 
             return tcs.Task;
+        }
+
+        private class SessionPropertiesListener : ISessionPropertiesListener
+        {
+            public void OnClose()
+            {
+            }
+
+            public void OnError(ErrorReason errorReason)
+            {
+                Console.WriteLine($"An error has occured : {errorReason}.");
+            }
+
+            public void OnRegistered(IRegistration registration)
+            {
+            }
+
+            public void OnSessionClose(ISessionId sessionId, IDictionary<string, string> properties, CloseReason closeReason)
+            {
+                Console.WriteLine("Closed: " + closeReason);
+            }
+
+            public void OnSessionEvent(ISessionId sessionId, SessionPropertiesListenerEventType? eventType, IDictionary<string, string> properties, IDictionary<string, string> previousValues)
+            {
+               if (eventType.HasValue)
+                {
+                    Console.WriteLine($"Session with id '{sessionId}' was {eventType.Value}.");
+                }
+            }
+
+            public void OnSessionOpen(ISessionId sessionId, IDictionary<string, string> properties)
+            {
+                Console.WriteLine($"Session with id '{sessionId}' has been opened.");
+            }
+
         }
     }
 }

@@ -2,13 +2,15 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <!-- TargetFramework>netcoreapp2.2</TargetFramework -->
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>dotnet_test</RootNamespace>
     <ImplicitUsings>true</ImplicitUsings>
+    <RestoreSources>$(RestoreSources);./local;https://api.nuget.org/v3/index.json</RestoreSources>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Diffusion.Client" Version="6.8.3" />
+    <PackageReference Include="Diffusion.Client" Version="1.0.0" />
   </ItemGroup>
 
 </Project>

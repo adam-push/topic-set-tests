@@ -11,12 +11,12 @@
 
   <ItemGroup>
     <Reference Include="Diffusion.Client">
-      <HintPath>/home/ploureiro/workspace/local/Diffusion.Client.dll</HintPath>
+      <HintPath>./local/Diffusion.Client.dll</HintPath>
     </Reference>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Diffusion.Client" Version="6.8.0" />
+    <PackageReference Include="NLog" Version="4.6.8" />
   </ItemGroup>
 
 </Project>

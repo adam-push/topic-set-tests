@@ -236,7 +236,7 @@ namespace dotnet_test
         private static async Task SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
         {
             // constants
-            const long test_duration = 1 * 60 * 1000; // 10 minutes in milliseconds
+            const long test_duration = 10 * 60 * 1000; // test duration in milliseconds
             const long frames_per_second = 10; // how many times per second do we batch the updates
 
             // Accumulators

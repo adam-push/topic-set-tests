@@ -235,26 +235,37 @@ namespace dotnet_test
 
         private static async Task SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
         {
+            // constants
+            const long test_duration = 1 * 60 * 1000; // 10 minutes in milliseconds
+            const long frames_per_second = 10; // how many times per second do we batch the updates
+
+            // Accumulators
             long total_updates = 0;
             long total_sleep_time = 0;
-            long test_duration = 1 * 60 * 1000; // 1 minute in milliseconds
-            long frames_per_second = 10; // how many times per second do we batch the updates
-            long frame_interval = 1000 / frames_per_second; // milliseconds
-            long updates_per_frame = updateRate / frames_per_second; // how many updates each loop needs to complete
+            long total_over_time = 0;
+
+            long frame_interval = 1000 / frames_per_second; // time window for each batch update in milliseconds
+            long updates_per_frame = updateRate / frames_per_second; // how many updates in each batch update
 
             Console.WriteLine($"Update has started at {updates_per_frame} updates every {frame_interval} ms for {test_duration} ms.");
             long start_time = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
             int round_robin_index = 0;
+            Random randomGenerator = new Random();
             while ( true ) {
                 long current_time = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
                 long elapsed_time = current_time - start_time;
 
                 if ( elapsed_time > test_duration ) {
+                    Console.WriteLine($"");
+                    Console.WriteLine($"");
                     Console.WriteLine($"Elapsed time: {elapsed_time} ms");
                     Console.WriteLine($"Total Sleep time during test: {total_sleep_time} ms");
+                    Console.WriteLine($"Total over time: {total_over_time} ms");
                     Console.WriteLine($"Total updates: {total_updates}");
                     float update_rate = total_updates / ((float) elapsed_time / 1000);
                     Console.WriteLine($"Update rate: {update_rate} updates per second");
+                    Console.WriteLine($"");
+                    Console.WriteLine($"");
                     break;
                 }
 
@@ -270,7 +281,9 @@ namespace dotnet_test
                     String topic = topicPath + "/" + round_robin_index;
 
                     // Payload of 250 random bytes.
-                    var value = Diffusion.DataTypes.Binary.ReadValue( new byte [ 250 ] );
+                    byte[] randomBytes = new byte[250];
+                    randomGenerator.NextBytes(randomBytes);
+                    var value = Diffusion.DataTypes.Binary.ReadValue( randomBytes );
 
                     session.TopicUpdate.SetAsync(topic, value).ContinueWith(
                         setTask => {
@@ -291,7 +304,7 @@ namespace dotnet_test
                 // check available time
                 long time_after_update = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
                 long elapsed_frame_time = time_after_update - current_time;
-                int sleep_time = (int) (frame_interval - elapsed_frame_time);
+                long sleep_time = frame_interval - elapsed_frame_time;
 
                 if ( !update_frame_result ) {
                     return;
@@ -301,11 +314,12 @@ namespace dotnet_test
                 // sleep if some time left
                 if ( sleep_time > 0 ) {
                     total_sleep_time += sleep_time;
-                    Thread.Sleep(sleep_time);
+                    Thread.Sleep((int)sleep_time);
                 }
                 // or log how long the update frame took
                 else {
-                    Console.WriteLine($"Topic updates took longer than allocated time: {elapsed_frame_time} ms.");
+                    //Console.WriteLine($"Topic updates took longer than allocated time: {elapsed_frame_time} ms.");
+                    total_over_time += - sleep_time;
                 }
             }
         }

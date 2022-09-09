@@ -126,7 +126,7 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 5_000);
+                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 10);
                         break;
                     case 9:
                         Console.WriteLine("Running test: Add all topics, then set them with ordered client-side throttling");
@@ -134,7 +134,12 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 5_000);
+                        await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 10);
+                        break;
+                    case 10:
+                        Console.WriteLine("Running test: Add all topics, then set them with a steady update rate.");
+                        await AddAllTopics(session, spec, topicPath);
+                        await SetAllTopicsSteadyRate(session, topicPath, numTopics, iterations);
                         break;
                     default:
                         Console.WriteLine("Invalid test number: " + test_number);
@@ -207,8 +212,8 @@ namespace dotnet_test
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                String data = "" + GetTimeMillis() + filler;
-                var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
+                // lock payload to a 250 bytes size random value
+                var value = Diffusion.DataTypes.Binary.ReadValue( new byte [ 250 ] );
 
                 session.TopicUpdate.SetAsync(topic, value).ContinueWith(
                     setTask => {
@@ -228,6 +233,83 @@ namespace dotnet_test
             return tcs.Task;
         }
 
+        private static async Task SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
+        {
+            long total_updates = 0;
+            long total_sleep_time = 0;
+            long test_duration = 1 * 60 * 1000; // 1 minute in milliseconds
+            long frames_per_second = 10; // how many times per second do we batch the updates
+            long frame_interval = 1000 / frames_per_second; // milliseconds
+            long updates_per_frame = updateRate / frames_per_second; // how many updates each loop needs to complete
+
+            Console.WriteLine($"Update has started at {updates_per_frame} updates every {frame_interval} ms for {test_duration} ms.");
+            long start_time = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+            int round_robin_index = 0;
+            while ( true ) {
+                long current_time = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+                long elapsed_time = current_time - start_time;
+
+                if ( elapsed_time > test_duration ) {
+                    Console.WriteLine($"Elapsed time: {elapsed_time} ms");
+                    Console.WriteLine($"Total Sleep time during test: {total_sleep_time} ms");
+                    Console.WriteLine($"Total updates: {total_updates}");
+                    float update_rate = total_updates / ((float) elapsed_time / 1000);
+                    Console.WriteLine($"Update rate: {update_rate} updates per second");
+                    break;
+                }
+
+                // build the task for the update frame
+                var update_frame_tcs = new TaskCompletionSource<bool>();
+                long completed = 0;
+
+                for (long i = 0; i < updates_per_frame; i++) {
+                    // Increment the round robin index within the total number of topics
+                    round_robin_index = (round_robin_index + 1) % numTopics;
+
+                    // Topic path determined by the round robin index
+                    String topic = topicPath + "/" + round_robin_index;
+
+                    // Payload of 250 random bytes.
+                    var value = Diffusion.DataTypes.Binary.ReadValue( new byte [ 250 ] );
+
+                    session.TopicUpdate.SetAsync(topic, value).ContinueWith(
+                        setTask => {
+                            if(setTask.Exception != null)
+                            {
+                                Console.WriteLine($"Exception publishing to {topic}: {setTask.Exception}");
+                                update_frame_tcs.SetResult(false);
+                                return;
+                            }
+                            if(Interlocked.Increment(ref completed) == updates_per_frame)
+                            {
+                                update_frame_tcs.SetResult(true);
+                            }
+                        }, TaskContinuationOptions.ExecuteSynchronously);
+                }
+                bool update_frame_result = await update_frame_tcs.Task;
+
+                // check available time
+                long time_after_update = DateTime.Now.Ticks / TimeSpan.TicksPerMillisecond;
+                long elapsed_frame_time = time_after_update - current_time;
+                int sleep_time = (int) (frame_interval - elapsed_frame_time);
+
+                if ( !update_frame_result ) {
+                    return;
+                }
+                total_updates += updates_per_frame;
+
+                // sleep if some time left
+                if ( sleep_time > 0 ) {
+                    total_sleep_time += sleep_time;
+                    Thread.Sleep(sleep_time);
+                }
+                // or log how long the update frame took
+                else {
+                    Console.WriteLine($"Topic updates took longer than allocated time: {elapsed_frame_time} ms.");
+                }
+            }
+        }
+
         private static Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
@@ -236,12 +318,14 @@ namespace dotnet_test
 
             int completed = 0;
 
-            for(var i = 0; i < iterations; i++) {
-                string topic = topicPath + "/" + (i % numTopics);
-                string data = "" + GetTimeMillis() + filler;
-
+            for(var i = 0; i < iterations; i++)
+            {
+                String topic = topicPath + "/" + (i % numTopics);
+                String data = "" + GetTimeMillis() + filler;
                 var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
 
+                // This doesn't work
+                // Main thread being locked waiting for a semaphore to be released
                 sem.Wait();
 
                 session.TopicUpdate.SetAsync(topic, value).ContinueWith(

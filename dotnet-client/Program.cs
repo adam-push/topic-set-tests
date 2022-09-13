@@ -22,22 +22,24 @@ namespace dotnet_test
         private int testNumber;
         private int totalTopics;
         private long timestamp;
+        private int targetUpdateRate;
         private float updateRate;
 
-      public PerformanceLogEntry(string label, int testNumber, int totalTopics, long timestamp, float updateRate) {
+      public PerformanceLogEntry(string label, int testNumber, int totalTopics, long timestamp, int targetUpdateRate, float updateRate) {
           this.label = label;
           this.testNumber = testNumber;
           this.totalTopics = totalTopics;
           this.timestamp = timestamp;
+          this.targetUpdateRate = targetUpdateRate;
           this.updateRate = updateRate;
       }
 
       public static string GetHeader() {
-          return "Label,Test Number,Total Topics,Timestamp,Update Rate";
+          return "Label,Test Number,Total Topics,Timestamp,Target Update Rate,Update Rate";
       }
 
       public string GetValue() {
-          return string.Format("{0},{1},{2},{3},{4}", label, testNumber, totalTopics, timestamp, updateRate);
+          return string.Format("{0},{1},{2},{3},{4},{5}", label, testNumber, totalTopics, timestamp, targetUpdateRate, updateRate);
       }
     }
 
@@ -231,7 +233,7 @@ namespace dotnet_test
         }
 
         private static void AddToLog(long timestamp, float updateRate) {
-            performanceLogEntries.Add(new PerformanceLogEntry(label, testNumber, totalTopics, timestamp, updateRate));
+            performanceLogEntries.Add(new PerformanceLogEntry(label, testNumber, totalTopics, timestamp, targetUpdateRate, updateRate));
         }
 
         private static void WritePerformanceLog() {

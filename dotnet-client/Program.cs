@@ -17,19 +17,20 @@ namespace dotnet_test
 {
     class Program
     {
-        const string filler = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            + "ABCDE";
+        const long MESSAGE_SIZE = 250; // 1 * 1024; // bytes
 
         static string url;
         static int iterations;
         static int numTopics = 100;
         static int test_number;
+
+        private static byte[] GetByteArray(long sizeInBytes)
+        {
+            Random rnd = new Random();
+            byte[] b = new byte[sizeInBytes];
+            rnd.NextBytes(b);
+            return b;
+          }
 
         static async Task Main(string[] args)
         {
@@ -147,8 +148,9 @@ namespace dotnet_test
                 }
 
                 long endTime = GetTimeMillis();
-                Console.WriteLine("Test took " + (endTime - startTime) + " ms");
-                Console.WriteLine("= " + ((double)iterations / (endTime - startTime) * 1000) + " msgs/sec");
+                Console.WriteLine($"Total Payload: {MESSAGE_SIZE * iterations / (double) (1024 * 1024)} MB");
+                Console.WriteLine($"Test took {(endTime - startTime)} ms");
+                Console.WriteLine($"Average Update Rate = {((double)iterations / (endTime - startTime) * 1000)} msgs/sec");
 
                 session?.Close();
                 session2?.Close();
@@ -208,13 +210,14 @@ namespace dotnet_test
         {
             var tcs = new TaskCompletionSource<bool>();
 
+            // Define a message content that will be sent in all iterations
+            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
+
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                // lock payload to a 250 bytes size random value
-                var value = Diffusion.DataTypes.Binary.ReadValue( new byte [ 250 ] );
-
                 session.TopicUpdate.SetAsync(topic, value).ContinueWith(
                     setTask => {
                         if(setTask.Exception != null)
@@ -327,16 +330,16 @@ namespace dotnet_test
         private static Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
-
             var sem = new SemaphoreSlim(outstandingUpdates);
-
             int completed = 0;
+
+            // Define a message content that will be sent in all iterations
+            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
             for(var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                String data = "" + GetTimeMillis() + filler;
-                var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
 
                 // This doesn't work
                 // Main thread being locked waiting for a semaphore to be released
@@ -363,17 +366,15 @@ namespace dotnet_test
         private static Task SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
-
             var sem = new SemaphoreQueue(outstandingUpdates);
-
             int completed = 0;
+
+            // Define a message content that will be sent in all iterations
+            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
             for(var i = 0; i < iterations; i++) {
                 string topic = topicPath + "/" + (i % numTopics);
-                string data = "" + GetTimeMillis() + filler;
-
-                var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
-
                 sem.Wait();
 
                 session.TopicUpdate.SetAsync(topic, value).ContinueWith(
@@ -398,13 +399,14 @@ namespace dotnet_test
         {
             var tcs = new TaskCompletionSource<bool>();
 
+            // Define a message content that will be sent in all iterations
+            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
+
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                String data = "" + GetTimeMillis() + filler;
-                var value = Diffusion.DataTypes.Binary.ReadValue(Encoding.UTF8.GetBytes(data));
-
                 session.TopicUpdate.AddAndSetAsync(topic, spec, value).ContinueWith(
                     setTask => {
                         if(setTask.Exception != null)

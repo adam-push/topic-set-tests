@@ -24,6 +24,8 @@ namespace dotnet_test
         static int numTopics = 100;
         static int test_number;
 
+        private static List<CancellationTokenSource> cancellationTokenSources;
+
         private static byte[] GetByteArray(long sizeInBytes)
         {
             Random rnd = new Random();
@@ -43,6 +45,8 @@ namespace dotnet_test
             url = args[0];
             iterations = Int32.Parse(args[1]);
             test_number = Int32.Parse(args[2]);
+
+            cancellationTokenSources = new List<CancellationTokenSource>();
 
             await Run();
         }
@@ -78,79 +82,98 @@ namespace dotnet_test
                 const String topicPath = "test/set/dotnet";
 
                 long startTime = GetTimeMillis();
+                bool result = false;
 
                 switch(test_number)
                 {
                     case 1:
                         Console.WriteLine("Running test: Add all topics then set them");
-                        await AddAllTopics(session, spec, topicPath);
+                        result = await AddAllTopics(session, spec, topicPath);
 
-                        // Reset start time for this test, so we only time the SetAsync() calls
-                        startTime = GetTimeMillis();
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        if (result) {
+                            Console.WriteLine("Topics have been added.");
 
+                            // Reset start time for this test, so we only time the SetAsync() calls
+                            startTime = GetTimeMillis();
+                            result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                        }
                         break;
+
                     case 2:
-                        Console.WriteLine("Running test: addAndSet()");
-                        await AddAndSetAllTopics(session, spec, topicPath);
+                        Console.WriteLine("Running test: Add and set all topics");
+                        result = await AddAndSetAllTopics(session, spec, topicPath);
                         break;
+
                     case 3:
                         Console.WriteLine("Not implemented: Use UpdateStreams to update the topics");
                         break;
+
                     case 4:
                         Console.WriteLine("Running test: Update existing topics");
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
                         break;
+
                     case 5:
                         Console.WriteLine("Running test: Add a single topic, then set all the others");
                         await AddOnlyOneTopic(session, spec, "dummy");
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
                         break;
+
                     case 6:
                         Console.WriteLine("Running test: Add a single topic in one session, then set the other topics in a different session");
                         await AddOnlyOneTopic(session2, spec, "dummy");
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
                         break;
+
                     case 7:
                         Console.WriteLine("Running test: Create two sessions, and set all topics in only one of them");
-                        await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
                         break;
+
                     case 8:
                         Console.WriteLine("Running test: Add all topics, then set them with unordered client-side throttling");
                         await AddAllTopics(session, spec, topicPath);
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 10);
+                        result = await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 10);
                         break;
+
                     case 9:
                         Console.WriteLine("Running test: Add all topics, then set them with ordered client-side throttling");
                         await AddAllTopics(session, spec, topicPath);
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 10);
+                        result = await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 10);
                         break;
+
                     case 10:
                         Console.WriteLine("Running test: Add all topics, then set them with a steady update rate.");
                         await AddAllTopics(session, spec, topicPath);
-                        await SetAllTopicsSteadyRate(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopicsSteadyRate(session, topicPath, numTopics, iterations);
                         break;
+
                     default:
                         Console.WriteLine("Invalid test number: " + test_number);
                         break;
                 }
 
-                long endTime = GetTimeMillis();
-                Console.WriteLine($"Total Payload: {MESSAGE_SIZE * iterations / (double) (1024 * 1024)} MB");
-                Console.WriteLine($"Test took {(endTime - startTime)} ms");
-                Console.WriteLine($"Average Update Rate = {((double)iterations / (endTime - startTime) * 1000)} msgs/sec");
+                if (result == false) {
+                    Console.WriteLine("Test Failed");
+                }
+                else {
+                    long endTime = GetTimeMillis();
+                    Console.WriteLine($"Total Payload: {MESSAGE_SIZE * iterations / (double) (1024 * 1024)} MB");
+                    Console.WriteLine($"Test took {(endTime - startTime)} ms");
+                    Console.WriteLine($"Average Update Rate = {((double)iterations / (endTime - startTime) * 1000)} msgs/sec");
+                }
 
                 session?.Close();
                 session2?.Close();
@@ -182,7 +205,7 @@ namespace dotnet_test
             return session.TopicControl.RemoveTopicsAsync(selector);
         }
 
-        private static Task AddAllTopics(ISession session, ITopicSpecification spec, String topicPath)
+        private static Task<bool> AddAllTopics(ISession session, ITopicSpecification spec, String topicPath)
         {
             TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
             int completedAddTasks = 0;
@@ -194,19 +217,20 @@ namespace dotnet_test
                         if(addTask.Exception != null)
                         {
                             Console.WriteLine($"Exception adding topic {topic}: {addTask.Exception}");
+                            // terminate loop if exception is caught
+                            tcs.SetResult(false);
                         }
-                        if(Interlocked.Increment(ref completedAddTasks) == numTopics)
+                        else if(Interlocked.Increment(ref completedAddTasks) == numTopics)
                         {
                             Console.WriteLine($"All topics created");
                             tcs.SetResult(true);
                         }
                     }, TaskContinuationOptions.ExecuteSynchronously);
             }
-
-           return tcs.Task;
+            return tcs.Task;
         }
 
-        private static Task SetAllTopics(ISession session, String topicPath, int numTopics, int iterations)
+        private static Task<bool> SetAllTopics(ISession session, String topicPath, int numTopics, int iterations)
         {
             var tcs = new TaskCompletionSource<bool>();
 
@@ -214,29 +238,34 @@ namespace dotnet_test
             byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
             var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
+            CancellationTokenSource tokenSource = new CancellationTokenSource();
+            cancellationTokenSources.Add(tokenSource);
+
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                session.TopicUpdate.SetAsync(topic, value).ContinueWith(
+
+                session.TopicUpdate.SetAsync(topic, value, tokenSource.Token).ContinueWith(
                     setTask => {
                         if(setTask.Exception != null)
                         {
                             Console.WriteLine($"Exception publishing to {topic}: {setTask.Exception}");
+                            CancelAllTasks();
+                            // terminate loop if exception is caught
+                            tcs.SetResult(false);
                         }
-                        if(Interlocked.Increment(ref completed) == iterations)
+                        else if(Interlocked.Increment(ref completed) == iterations)
                         {
                             Console.WriteLine($"All updates done");
                             tcs.SetResult(true);
                         }
                     }, TaskContinuationOptions.ExecuteSynchronously);
             }
-
-            Console.WriteLine("All topics Set()");
             return tcs.Task;
         }
 
-        private static async Task SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
+        private static async Task<bool> SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
         {
             // constants
             const long test_duration = 10 * 60 * 1000; // test duration in milliseconds
@@ -310,7 +339,7 @@ namespace dotnet_test
                 long sleep_time = frame_interval - elapsed_frame_time;
 
                 if ( !update_frame_result ) {
-                    return;
+                    return false;
                 }
                 total_updates += updates_per_frame;
 
@@ -325,9 +354,10 @@ namespace dotnet_test
                     total_over_time += - sleep_time;
                 }
             }
+            return true;
         }
 
-        private static Task SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        private static Task<bool> SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
             var sem = new SemaphoreSlim(outstandingUpdates);
@@ -363,7 +393,7 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static Task SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        private static Task<bool> SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
             var sem = new SemaphoreQueue(outstandingUpdates);
@@ -395,7 +425,7 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static Task AddAndSetAllTopics(ISession session, ITopicSpecification spec, String topicPath)
+        private static Task<bool> AddAndSetAllTopics(ISession session, ITopicSpecification spec, String topicPath)
         {
             var tcs = new TaskCompletionSource<bool>();
 
@@ -403,17 +433,24 @@ namespace dotnet_test
             byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
             var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
+            CancellationTokenSource tokenSource = new CancellationTokenSource();
+            cancellationTokenSources.Add(tokenSource);
+
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
-                session.TopicUpdate.AddAndSetAsync(topic, spec, value).ContinueWith(
+
+                session.TopicUpdate.AddAndSetAsync(topic, spec, value, tokenSource.Token).ContinueWith(
                     setTask => {
                         if(setTask.Exception != null)
                         {
                             Console.WriteLine($"Exception publishing to {topic}: {setTask.Exception}");
+                            CancelAllTasks();
+                            // terminate loop if exception is caught
+                            tcs.SetResult(false);
                         }
-                        if(Interlocked.Increment(ref completed) == iterations)
+                        else if(Interlocked.Increment(ref completed) == iterations)
                         {
                             Console.WriteLine($"All updates done");
                             tcs.SetResult(true);
@@ -422,6 +459,13 @@ namespace dotnet_test
             }
 
             return tcs.Task;
+        }
+
+        private static void CancelAllTasks() {
+            Console.WriteLine("Cancelling all tasks");
+            foreach (CancellationTokenSource tokenSource in cancellationTokenSources) {
+                tokenSource.Cancel();
+            }
         }
 
         private class SessionPropertiesListener : ISessionPropertiesListener

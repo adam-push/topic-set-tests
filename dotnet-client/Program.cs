@@ -55,6 +55,12 @@ namespace dotnet_test
         {
             ISession session = null;
             ISession session2 = null;
+			
+			Console.WriteLine("List of loaded assemblies :");
+			foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                Console.WriteLine(assembly.ToString());
+            }
 
             try
             {

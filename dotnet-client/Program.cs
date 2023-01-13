@@ -196,7 +196,12 @@ namespace dotnet_test
                     long endTime = GetTimeMillis();
                     Console.WriteLine($"Total Payload: {MESSAGE_SIZE * iterations / (double) (1024 * 1024)} MB");
                     Console.WriteLine($"Test took {(endTime - startTime)} ms");
-                    Console.WriteLine($"Average Update Rate = {((double)iterations / (endTime - startTime) * 1000)} msgs/sec");
+
+                    double average = (double)iterations / (endTime - startTime) * 1000;
+                    Console.WriteLine($"Average Update Rate = {Math.Round(average)} msgs/sec");
+
+                    DateTimeOffset now = (DateTimeOffset)DateTime.UtcNow;
+                    Console.WriteLine($"Test Timestamp: {now.ToUnixTimeSeconds()}");
                 }
 
                 session?.Close();

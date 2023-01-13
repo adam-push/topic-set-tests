@@ -1,4 +1,4 @@
-﻿using PushTechnology.ClientInterface.Client.Factories;
+using PushTechnology.ClientInterface.Client.Factories;
 using PushTechnology.ClientInterface.Client.Session;
 using PushTechnology.ClientInterface.Client.Topics;
 using PushTechnology.ClientInterface.Client.Topics.Details;
@@ -23,8 +23,11 @@ namespace dotnet_test
         static int iterations;
         static int numTopics = 100;
         static int test_number;
+        static int total_unique_messages;
 
         private static List<CancellationTokenSource> cancellationTokenSources;
+
+        private static List<IBinary> uniqueValues;
 
         private static byte[] GetByteArray(long sizeInBytes)
         {
@@ -46,7 +49,22 @@ namespace dotnet_test
             iterations = Int32.Parse(args[1]);
             test_number = Int32.Parse(args[2]);
 
+            if (args.Length >= 4) {
+                total_unique_messages = Int32.Parse(args[3]);
+            }
+            else {
+                total_unique_messages = 1;
+            }
+
             cancellationTokenSources = new List<CancellationTokenSource>();
+
+            // Define the message content that will be sent during the test
+            uniqueValues = new List<IBinary>();
+            for ( int i = 0; i < total_unique_messages; i++ ) {
+                byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+                uniqueValues.Add(Diffusion.DataTypes.Binary.ReadValue(messagePayload));
+            }
+            Console.WriteLine($"Test using {total_unique_messages} unique topic values in round-robin.");
 
             await Run();
         }
@@ -55,7 +73,7 @@ namespace dotnet_test
         {
             ISession session = null;
             ISession session2 = null;
-			
+
 			Console.WriteLine("List of loaded assemblies :");
 			foreach (System.Reflection.Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -240,10 +258,6 @@ namespace dotnet_test
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            // Define a message content that will be sent in all iterations
-            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
-            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
-
             CancellationTokenSource tokenSource = new CancellationTokenSource();
             cancellationTokenSources.Add(tokenSource);
 
@@ -251,6 +265,7 @@ namespace dotnet_test
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
+                var value = uniqueValues[i % total_unique_messages];
 
                 session.TopicUpdate.SetAsync(topic, value, tokenSource.Token).ContinueWith(
                     setTask => {
@@ -435,10 +450,6 @@ namespace dotnet_test
         {
             var tcs = new TaskCompletionSource<bool>();
 
-            // Define a message content that will be sent in all iterations
-            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
-            var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
-
             CancellationTokenSource tokenSource = new CancellationTokenSource();
             cancellationTokenSources.Add(tokenSource);
 
@@ -446,6 +457,7 @@ namespace dotnet_test
             for (var i = 0; i < iterations; i++)
             {
                 String topic = topicPath + "/" + (i % numTopics);
+                var value = uniqueValues[i % total_unique_messages];
 
                 session.TopicUpdate.AddAndSetAsync(topic, spec, value, tokenSource.Token).ContinueWith(
                     setTask => {

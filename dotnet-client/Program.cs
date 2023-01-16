@@ -24,6 +24,7 @@ namespace dotnet_test
         static int numTopics = 100;
         static int test_number;
         static int total_unique_messages;
+		static int maximum_queue_size;
 
         private static List<CancellationTokenSource> cancellationTokenSources;
 
@@ -41,7 +42,7 @@ namespace dotnet_test
         {
             if(args.Length < 3)
             {
-                Console.WriteLine("Arguments: <url> <iterations> <test_number>");
+                Console.WriteLine("Arguments: <url> <iterations> <test_number> [<total unique messages = 1> <maximum queue size = 10000>]");
                 Environment.Exit(1);
             }
 
@@ -55,6 +56,14 @@ namespace dotnet_test
             else {
                 total_unique_messages = 1;
             }
+			
+            if (args.Length >= 5) {
+                maximum_queue_size = Int32.Parse(args[4]);
+            }
+            else {
+                maximum_queue_size = 10000;
+            }
+            Console.WriteLine($"Test using maximum queue size {maximum_queue_size}");
 
             cancellationTokenSources = new List<CancellationTokenSource>();
 
@@ -86,7 +95,7 @@ namespace dotnet_test
                     .SessionStateChangedHandler((sender, args) => {
                         Console.WriteLine("Session state changed by " + sender + " to " + args.NewState);
                         })
-                    .MaximumQueueSize(10_000)
+                    .MaximumQueueSize(maximum_queue_size)
                     .Principal("admin")
                     .Password("password")
                     .Open(url);

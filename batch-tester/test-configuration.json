@@ -15,7 +15,7 @@
     "unique_values": [1, 25, 100],
     "topic_value_size": [100, 250, 500, 1000],
     "message_queue_size": [10000, 1000000, 1000000],
-    "total_topics": [100, 1000, 10000]
+    "total_topics": [100, 1000]
   },
   "results": {
     "update_rate": {
@@ -37,6 +37,9 @@
     "PushTechnology.ClientInterface.Client.Session.SessionClosedException",
     "Connection failed"
   ],
+  "log": {
+    "path": "~/batch-tester.log"
+  },
   "csv": {
     "path": "~/results.csv",
     "sequence": [

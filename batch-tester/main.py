@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from os.path import abspath, expanduser
 from typing import NamedTuple, Optional
 
@@ -27,6 +28,7 @@ class Test:
     failed_conditions: list[str]
     csv_output: list[str]
     test_program_path: str
+    log_path: str
 
     _results: dict
 
@@ -38,7 +40,8 @@ class Test:
             result_extraction_properties: dict,
             failed_conditions: list[str],
             csv_output: list[str],
-            test_program_path: str
+            test_program_path: str,
+            log_path: str
     ):
         self.parameters = parameters
         self.environment_variables = environment_variables
@@ -47,6 +50,7 @@ class Test:
         self.failed_conditions = failed_conditions
         self.csv_output = csv_output
         self.test_program_path = test_program_path
+        self.log_path = log_path
         self._results = dict()
 
     def __generate_parameter_table(self) -> dict:
@@ -62,9 +66,19 @@ class Test:
         for condition in self.failed_conditions:
             if condition in output:
                 # A failed condition has been matched, the test is marked as failed
+                # Write the output to the log file
+                cleaned_output = os.linesep.join([s for s in output.splitlines() if s])
+                with open(self.log_path, "a+") as f:
+                    log_entry = [
+                        self.command,
+                        "-----",
+                        cleaned_output,
+                        "-----"
+                    ]
+                    f.write(os.linesep.join(log_entry))
                 return None
 
-        lines: list[str] = output.split("\n")
+        lines: list[str] = output.splitlines()
 
         for parameter, properties in self.result_extraction_properties.items():
             substring = properties.get("substring", None)
@@ -128,7 +142,8 @@ class Test:
             self.result_extraction_properties,
             self.failed_conditions,
             self.csv_output,
-            self.test_program_path
+            self.test_program_path,
+            self.log_path
         )
 
     def __repr__(self):
@@ -238,6 +253,9 @@ def main():
     original_csv_path = csv.get("path", None)
     csv_path = resolve_path(original_csv_path)
     csv_sequence = csv.get("sequence", None)
+    log = configuration.get("log", dict())
+    original_log_path = log.get("path", None)
+    log_path = resolve_path(original_log_path)
 
     command = configuration.get("command", None)
 
@@ -251,6 +269,9 @@ def main():
     if test_program_path is None:
         print(f"Error: unable to resolve path {original_test_program_path}. Aborting")
         exit(2)
+    if log_path is None:
+        print(f"Error: unable to resolve path {original_log_path}. Aborting")
+        exit(3)
 
     test_template = Test(
         parameters,
@@ -259,13 +280,14 @@ def main():
         result_extraction_properties,
         failed_conditions,
         csv_sequence,
-        test_program_path
+        test_program_path,
+        log_path
     )
     test_suite = build_permutations(test_template)
 
     with open(csv_path, "w+") as f:
         # write the CSV header
-        f.write(f"{test_template.get_csv_header()}\n")
+        f.write(f"{test_template.get_csv_header()}{os.linesep}")
 
         print(f"Running test suite comprised of {len(test_suite)} permutations")
         for i, test in enumerate(test_suite):
@@ -278,7 +300,8 @@ def main():
                     output += f"{name: <12}: {value: <10} "
                 print(f"{i:03} - {output}")
             # Write CSV test result data
-            f.write(f"{test.get_csv_data()}\n")
+            f.write(f"{test.get_csv_data()}{os.linesep}")
+            time.sleep(10)
 
     print(f"Results have been written to {csv_path}")
     print("Done")

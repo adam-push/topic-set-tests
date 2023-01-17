@@ -5,7 +5,6 @@
     <!-- TargetFramework>netcoreapp2.2</TargetFramework -->
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <RootNamespace>dotnet_test</RootNamespace>
-    <ImplicitUsings>true</ImplicitUsings>
     <RestoreSources>$(RestoreSources);./local;https://api.nuget.org/v3/index.json</RestoreSources>
   </PropertyGroup>
 

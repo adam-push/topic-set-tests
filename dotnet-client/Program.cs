@@ -17,13 +17,51 @@ namespace dotnet_test
 {
     class Program
     {
-        const long MESSAGE_SIZE = 250; // 1 * 1024; // bytes
+        const int DEFAULT_TOTAL_UNIQUE_TOPIC_VALUES = 1;
+        const int DEFAULT_TOPIC_VALUE_SIZE = 250;
+        const int DEFAULT_MESSAGE_QUEUE_SIZE = 10_000;
+        const int DEFAULT_TOTAL_TOPICS = 100;
 
+        // [0]: URL
         static string url;
+
+        // [1]: Iterations
+        // total topic value changes applied to the topics
         static int iterations;
-        static int numTopics = 100;
+
+        // [2]: Test number
+        // Index for the various tests this program contains:
+        // - 1: Add all topics then set them
+        // - 2: Add and set all topics
+        // - 3: Not Implemented
+        // - 4: Update existing topics
+        // - 5: Add a single topic, then set all the others
+        // - 6: Add a single topic in one session, then set the other topics in a different session
+        // - 7: Create two sessions, and set all topics in only one of them
+        // - 8: Add all topics, then set them with unordered client-side throttling
+        // - 9: Add all topics, then set them with ordered client-side throttling
+        // - 10: Add all topics, then set them with a steady update rate
         static int test_number;
-        static int total_unique_messages;
+
+        // [3]: Total unique topic values
+        // The test program will create these many unique topic values and iterate between them to set the topic values.
+        // Default value: DEFAULT_TOTAL_UNIQUE_TOPIC_VALUES
+        static int total_unique_topic_values;
+
+        // [4]: Topic value size
+        // The size of each random topic value
+        // Default value: DEFAULT_TOPIC_VALUE_SIZE
+        static int topic_value_size;
+
+        // [5]: Session message queue
+        // The size of the message queue of the publishing session
+        // Default value: DEFAULT_MESSAGE_QUEUE_SIZE
+        static int message_queue_size;
+
+        // [6]: Total topics
+        // The amount of topics created and updated in the test
+        // Default value: 100
+        static int total_topics;
 
         private static List<CancellationTokenSource> cancellationTokenSources;
 
@@ -41,30 +79,27 @@ namespace dotnet_test
         {
             if(args.Length < 3)
             {
-                Console.WriteLine("Arguments: <url> <iterations> <test_number>");
+                Console.WriteLine("Arguments: <url> <iterations> <test_number> [<unique_topic_values> [<topic_value_size> [<message_queue_size> [<total_topics>]]]]");
                 Environment.Exit(1);
             }
 
             url = args[0];
             iterations = Int32.Parse(args[1]);
             test_number = Int32.Parse(args[2]);
-
-            if (args.Length >= 4) {
-                total_unique_messages = Int32.Parse(args[3]);
-            }
-            else {
-                total_unique_messages = 1;
-            }
+            total_unique_topic_values = ( args.Length >= 4 ) ? Int32.Parse( args[3] ) : DEFAULT_TOTAL_UNIQUE_TOPIC_VALUES;
+            topic_value_size = ( args.Length >= 5 ) ? Int32.Parse( args[4] ) : DEFAULT_TOPIC_VALUE_SIZE;
+            message_queue_size = ( args.Length >= 6 ) ? Int32.Parse( args[5] ) : DEFAULT_MESSAGE_QUEUE_SIZE;
+            total_topics = ( args.Length >= 7 ) ? Int32.Parse( args[6] ) : DEFAULT_TOTAL_TOPICS;
 
             cancellationTokenSources = new List<CancellationTokenSource>();
 
             // Define the message content that will be sent during the test
             uniqueValues = new List<IBinary>();
-            for ( int i = 0; i < total_unique_messages; i++ ) {
-                byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            for ( int i = 0; i < total_unique_topic_values; i++ ) {
+                byte[] messagePayload = Program.GetByteArray(topic_value_size);
                 uniqueValues.Add(Diffusion.DataTypes.Binary.ReadValue(messagePayload));
             }
-            Console.WriteLine($"Test using {total_unique_messages} unique topic values in round-robin.");
+            Console.WriteLine($"Test using {total_unique_topic_values} unique topic values in round-robin.");
 
             await Run();
         }
@@ -86,7 +121,7 @@ namespace dotnet_test
                     .SessionStateChangedHandler((sender, args) => {
                         Console.WriteLine("Session state changed by " + sender + " to " + args.NewState);
                         })
-                    .MaximumQueueSize(10_000)
+                    .MaximumQueueSize(message_queue_size)
                     .Principal("admin")
                     .Password("password")
                     .Open(url);
@@ -119,7 +154,7 @@ namespace dotnet_test
 
                             // Reset start time for this test, so we only time the SetAsync() calls
                             startTime = GetTimeMillis();
-                            result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                            result = await SetAllTopics(session, topicPath, total_topics, iterations);
                         }
                         break;
 
@@ -134,7 +169,7 @@ namespace dotnet_test
 
                     case 4:
                         Console.WriteLine("Running test: Update existing topics");
-                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, total_topics, iterations);
                         break;
 
                     case 5:
@@ -143,7 +178,7 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, total_topics, iterations);
                         break;
 
                     case 6:
@@ -152,12 +187,12 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, total_topics, iterations);
                         break;
 
                     case 7:
                         Console.WriteLine("Running test: Create two sessions, and set all topics in only one of them");
-                        result = await SetAllTopics(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopics(session, topicPath, total_topics, iterations);
                         break;
 
                     case 8:
@@ -166,7 +201,7 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        result = await SetAllTopicsThrottled(session, topicPath, numTopics, iterations, 10);
+                        result = await SetAllTopicsThrottled(session, topicPath, total_topics, iterations, 10);
                         break;
 
                     case 9:
@@ -175,13 +210,13 @@ namespace dotnet_test
 
                         // Reset start time for this test, so we only time the SetAsync() calls
                         startTime = GetTimeMillis();
-                        result = await SetAllTopicsThrottledOrdered(session, topicPath, numTopics, iterations, 10);
+                        result = await SetAllTopicsThrottledOrdered(session, topicPath, total_topics, iterations, 10);
                         break;
 
                     case 10:
                         Console.WriteLine("Running test: Add all topics, then set them with a steady update rate.");
                         await AddAllTopics(session, spec, topicPath);
-                        result = await SetAllTopicsSteadyRate(session, topicPath, numTopics, iterations);
+                        result = await SetAllTopicsSteadyRate(session, topicPath, total_topics, iterations);
                         break;
 
                     default:
@@ -194,14 +229,17 @@ namespace dotnet_test
                 }
                 else {
                     long endTime = GetTimeMillis();
-                    Console.WriteLine($"Total Payload: {MESSAGE_SIZE * iterations / (double) (1024 * 1024)} MB");
-                    Console.WriteLine($"Test took {(endTime - startTime)} ms");
-
-                    double average = (double)iterations / (endTime - startTime) * 1000;
-                    Console.WriteLine($"Average Update Rate = {Math.Round(average)} msgs/sec");
-
+                    long elapsedTimeMs = endTime - startTime;
+                    double totalPayloadMB = (double) topic_value_size * (iterations / (double) (1024 * 1024));
+                    double averageUpdateRate = ((double)iterations / elapsedTimeMs) * 1000;
+                    double averageThroughput = (totalPayloadMB / elapsedTimeMs) * 1000;
                     DateTimeOffset now = (DateTimeOffset)DateTime.UtcNow;
-                    Console.WriteLine($"Test Timestamp: {now.ToUnixTimeSeconds()}");
+
+                    Console.WriteLine($"Test took {(endTime - startTime)} ms");
+                    Console.WriteLine($"Total Payload = {Math.Round(totalPayloadMB)} MB");
+                    Console.WriteLine($"Average Update Rate = {Math.Round(averageUpdateRate)} updates/s");
+                    Console.WriteLine($"Average Throughput = {Math.Round(averageThroughput)} MB/s");
+                    Console.WriteLine($"Test Timestamp = {now.ToUnixTimeSeconds()}");
                 }
 
                 session?.Close();
@@ -239,7 +277,7 @@ namespace dotnet_test
             TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
             int completedAddTasks = 0;
 
-            for(var i = 0; i < numTopics; i++) {
+            for(var i = 0; i < total_topics; i++) {
                 String topic = topicPath + "/" + i;
                 session.TopicControl.AddTopicAsync(topic, spec).ContinueWith(
                     addTask => {
@@ -249,7 +287,7 @@ namespace dotnet_test
                             // terminate loop if exception is caught
                             tcs.SetResult(false);
                         }
-                        else if(Interlocked.Increment(ref completedAddTasks) == numTopics)
+                        else if(Interlocked.Increment(ref completedAddTasks) == total_topics)
                         {
                             Console.WriteLine($"All topics created");
                             tcs.SetResult(true);
@@ -259,7 +297,7 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static Task<bool> SetAllTopics(ISession session, String topicPath, int numTopics, int iterations)
+        private static Task<bool> SetAllTopics(ISession session, String topicPath, int total_topics, int iterations)
         {
             var tcs = new TaskCompletionSource<bool>();
 
@@ -269,8 +307,8 @@ namespace dotnet_test
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
-                String topic = topicPath + "/" + (i % numTopics);
-                var value = uniqueValues[i % total_unique_messages];
+                String topic = topicPath + "/" + (i % total_topics);
+                var value = uniqueValues[i % total_unique_topic_values];
 
                 session.TopicUpdate.SetAsync(topic, value, tokenSource.Token).ContinueWith(
                     setTask => {
@@ -291,7 +329,7 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static async Task<bool> SetAllTopicsSteadyRate(ISession session, String topicPath, int numTopics, int updateRate)
+        private static async Task<bool> SetAllTopicsSteadyRate(ISession session, String topicPath, int total_topics, int updateRate)
         {
             // constants
             const long test_duration = 10 * 60 * 1000; // test duration in milliseconds
@@ -331,17 +369,13 @@ namespace dotnet_test
                 var update_frame_tcs = new TaskCompletionSource<bool>();
                 long completed = 0;
 
-                for (long i = 0; i < updates_per_frame; i++) {
+                for (int i = 0; i < updates_per_frame; i++) {
                     // Increment the round robin index within the total number of topics
-                    round_robin_index = (round_robin_index + 1) % numTopics;
+                    round_robin_index = (round_robin_index + 1) % total_topics;
 
                     // Topic path determined by the round robin index
                     String topic = topicPath + "/" + round_robin_index;
-
-                    // Payload of 250 random bytes.
-                    byte[] randomBytes = new byte[250];
-                    randomGenerator.NextBytes(randomBytes);
-                    var value = Diffusion.DataTypes.Binary.ReadValue( randomBytes );
+                    var value = uniqueValues[i % total_unique_topic_values];
 
                     session.TopicUpdate.SetAsync(topic, value).ContinueWith(
                         setTask => {
@@ -383,19 +417,19 @@ namespace dotnet_test
             return true;
         }
 
-        private static Task<bool> SetAllTopicsThrottled(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        private static Task<bool> SetAllTopicsThrottled(ISession session, String topicPath, int total_topics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
             var sem = new SemaphoreSlim(outstandingUpdates);
             int completed = 0;
 
             // Define a message content that will be sent in all iterations
-            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            byte[] messagePayload = Program.GetByteArray(topic_value_size);
             var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
             for(var i = 0; i < iterations; i++)
             {
-                String topic = topicPath + "/" + (i % numTopics);
+                String topic = topicPath + "/" + (i % total_topics);
 
                 // This doesn't work
                 // Main thread being locked waiting for a semaphore to be released
@@ -419,18 +453,18 @@ namespace dotnet_test
             return tcs.Task;
         }
 
-        private static Task<bool> SetAllTopicsThrottledOrdered(ISession session, String topicPath, int numTopics, int iterations, int outstandingUpdates)
+        private static Task<bool> SetAllTopicsThrottledOrdered(ISession session, String topicPath, int total_topics, int iterations, int outstandingUpdates)
         {
             var tcs = new TaskCompletionSource<bool>();
             var sem = new SemaphoreQueue(outstandingUpdates);
             int completed = 0;
 
             // Define a message content that will be sent in all iterations
-            byte[] messagePayload = Program.GetByteArray(MESSAGE_SIZE);
+            byte[] messagePayload = Program.GetByteArray(topic_value_size);
             var value = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
 
             for(var i = 0; i < iterations; i++) {
-                string topic = topicPath + "/" + (i % numTopics);
+                string topic = topicPath + "/" + (i % total_topics);
                 sem.Wait();
 
                 session.TopicUpdate.SetAsync(topic, value).ContinueWith(
@@ -461,8 +495,12 @@ namespace dotnet_test
             int completed = 0;
             for (var i = 0; i < iterations; i++)
             {
-                String topic = topicPath + "/" + (i % numTopics);
-                var value = uniqueValues[i % total_unique_messages];
+                String topic = topicPath + "/" + (i % total_topics);
+                var value = uniqueValues[i % total_unique_topic_values];
+
+                // byte[] messagePayload = Program.GetByteArray(topic_value_size);
+                // var discardedValue = Diffusion.DataTypes.Binary.ReadValue(messagePayload);
+                // Console.WriteLine($"Generated random binary data that will not be used: {discardedValue}");
 
                 session.TopicUpdate.AddAndSetAsync(topic, spec, value, tokenSource.Token).ContinueWith(
                     setTask => {

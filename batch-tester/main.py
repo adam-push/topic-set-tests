@@ -62,23 +62,22 @@ class Test:
             output = output.replace(f"{{{name}}}", f"{value}")
         return output
 
-    def __extract_test_results(self, output: str) -> Optional[dict]:
+    def __extract_test_results(self, lines: list[str]) -> Optional[dict]:
         for condition in self.failed_conditions:
-            if condition in output:
-                # A failed condition has been matched, the test is marked as failed
-                # Write the output to the log file
-                cleaned_output = os.linesep.join([s for s in output.splitlines() if s])
-                with open(self.log_path, "a+") as f:
-                    log_entry = [
-                        self.command,
-                        "-----",
-                        cleaned_output,
-                        "-----"
-                    ]
-                    f.write(os.linesep.join(log_entry))
-                return None
-
-        lines: list[str] = output.splitlines()
+            for line in lines:
+                if condition in line:
+                    # A failed condition has been matched, the test is marked as failed
+                    # Write the output to the log file
+                    cleaned_output = os.linesep.join([s for s in lines if s])
+                    with open(self.log_path, "a+") as f:
+                        log_entry = [
+                            self.__generate_command(),
+                            "-----",
+                            cleaned_output,
+                            "-----"
+                        ]
+                        f.write(os.linesep.join(log_entry))
+                    return None
 
         for parameter, properties in self.result_extraction_properties.items():
             substring = properties.get("substring", None)
@@ -109,14 +108,24 @@ class Test:
             environment_variables[ev.name] = f"{ev.possible_values[0]}"
 
         # run the command with the new environment variables set
-        result = subprocess.run(
+        process = subprocess.Popen(
             command_list,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=environment_variables,
             cwd=self.test_program_path
         )
-        return self.__extract_test_results(result.stdout.decode('utf-8'))
+        # Loop to print and store the output for test result extraction
+        result = list()
+        while True:
+            output = process.stdout.readline().decode("utf-8")
+            if output == '' and process.poll() is not None:
+                break
+            if output:
+                sanitised_output = output.strip()
+                result.append(sanitised_output)
+                print(f"{sanitised_output}")
+        return self.__extract_test_results(result)
 
     def get_csv_header(self) -> str:
         return ", ".join(self.csv_output)
@@ -126,13 +135,11 @@ class Test:
         complete_map = self.__generate_parameter_table()
         complete_map.update({ev.name: ev.possible_values[0] for ev in self.environment_variables})
         complete_map.update(self._results)
+        complete_map["command"] = f"\"{self.__generate_command()}\""
 
         for output_parameter in self.csv_output:
             output += f"{complete_map.get(output_parameter, None)}, "
         return output
-
-    def test_extract_test_results(self, output: str):
-        return self.__extract_test_results(output)
 
     def __copy__(self):
         return Test(
@@ -221,6 +228,17 @@ def resolve_path(path: Optional[str]) -> Optional[str]:
     return abspath(result)
 
 
+def get_operating_system() -> str:
+    if "linux" in sys.platform:
+        return "Linux"
+    elif "darwin" in sys.platform:
+        return "MacOS"
+    elif "win" in sys.platform:
+        return "Windows"
+    else:
+        return "Unknown"
+
+
 def usage():
     print(f"Usage: python {sys.argv[0]} <url>")
 
@@ -249,15 +267,17 @@ def main():
 
     result_extraction_properties = configuration.get("results", dict())
     failed_conditions = configuration.get("failed_conditions", list())
+    command = configuration.get("command", None)
+    delay_between_tests = configuration.get("delay_between_tests_seconds", 5)
+
     csv = configuration.get("csv", dict())
     original_csv_path = csv.get("path", None)
     csv_path = resolve_path(original_csv_path)
     csv_sequence = csv.get("sequence", None)
+
     log = configuration.get("log", dict())
     original_log_path = log.get("path", None)
     log_path = resolve_path(original_log_path)
-
-    command = configuration.get("command", None)
 
     original_test_program_path = configuration.get("test_program_path", None)
     test_program_path = resolve_path(original_test_program_path)
@@ -272,6 +292,9 @@ def main():
     if log_path is None:
         print(f"Error: unable to resolve path {original_log_path}. Aborting")
         exit(3)
+
+    # inject additional parameters
+    parameters.append(Parameter("operating_system", [get_operating_system()]))
 
     test_template = Test(
         parameters,
@@ -289,19 +312,19 @@ def main():
         # write the CSV header
         f.write(f"{test_template.get_csv_header()}{os.linesep}")
 
-        print(f"Running test suite comprised of {len(test_suite)} permutations")
+        total_permutations = len(test_suite)
+        print(f"Running test suite comprised of {total_permutations} permutations")
         for i, test in enumerate(test_suite):
-            test_results = test.run()
-            if test_results is None:
-                print(f"{i:03} - Failed")
-            else:
-                output = ""
-                for name, value in test_results.items():
-                    output += f"{name: <12}: {value: <10} "
-                print(f"{i:03} - {output}")
-            # Write CSV test result data
-            f.write(f"{test.get_csv_data()}{os.linesep}")
-            time.sleep(10)
+            print(f"{os.linesep}{test}")
+            print(f"Test {i + 1} / {total_permutations} begins{os.linesep}")
+            test.run()
+            print(f"Test {i + 1} / {total_permutations} done{os.linesep}")
+
+            f.write(f"{test.get_csv_data()}\n")
+
+            if i + 1 != len(test_suite):
+                print(f"{os.linesep}Sleeping for {delay_between_tests} seconds before next test.{os.linesep}")
+                time.sleep(delay_between_tests)
 
     print(f"Results have been written to {csv_path}")
     print("Done")

@@ -1,20 +1,14 @@
 {
+  "delay_between_tests_seconds" : 30,
   "test_program_path": "../dotnet-client",
   "command": "dotnet run -- {url} {iterations} {test_type} {unique_values} {topic_value_size} {message_queue_size} {total_topics}",
-  "environment_variables": {
-    "MINIMUM_RATIO": [0.001],
-    "INITIAL_RATIO": [0.1],
-    "MAXIMUM_RATIO": [0.1],
-    "PRESSURE_THRESHOLD": [0.8],
-    "GROWTH_FACTOR": [1.0],
-    "PRESSURE_WEIGHT": [40.0]
-  },
+  "environment_variables": {},
   "parameters": {
     "test_type": [2],
-    "iterations": [1000000, 2000000, 5000000, 10000000],
-    "unique_values": [1, 25, 100],
-    "topic_value_size": [100, 250, 500, 1000],
-    "message_queue_size": [10000, 1000000, 1000000],
+    "iterations": [1000000, 5000000, 10000000, 50000000],
+    "unique_values": [1],
+    "topic_value_size": [250, 500],
+    "message_queue_size": [10000, 100000, 1000000],
     "total_topics": [100, 1000]
   },
   "results": {
@@ -34,7 +28,7 @@
   "failed_conditions": [
     "Test Failed",
     "The build failed",
-    "PushTechnology.ClientInterface.Client.Session.SessionClosedException",
+    "SessionClosedException",
     "Connection failed"
   ],
   "log": {
@@ -43,21 +37,17 @@
   "csv": {
     "path": "~/results.csv",
     "sequence": [
+      "operating_system",
       "test_type",
-      "MINIMUM_RATIO",
-      "INITIAL_RATIO",
-      "MAXIMUM_RATIO",
-      "PRESSURE_THRESHOLD",
-      "GROWTH_FACTOR",
-      "PRESSURE_WEIGHT",
-      "iterations",
       "unique_values",
+      "total_topics",
+      "iterations",
       "topic_value_size",
       "message_queue_size",
-      "total_topics",
       "update_rate",
       "average_throughput",
-      "timestamp"
+      "timestamp",
+      "command"
     ]
   }
 }

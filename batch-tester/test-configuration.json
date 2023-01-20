@@ -1,15 +1,48 @@
 {
-  "delay_between_tests_seconds" : 30,
-  "test_program_path": "../dotnet-client",
-  "command": "dotnet run -- {url} {iterations} {test_type} {unique_values} {topic_value_size} {message_queue_size} {total_topics}",
-  "environment_variables": {},
+  "delay_between_tests_seconds": 15,
+  "test_repetitions": 3,
+  "environment_variables": {
+    "MINIMUM_RATIO": [0.001],
+    "INITIAL_RATIO": [0.1],
+    "MAXIMUM_RATIO": [0.1],
+    "PRESSURE_THRESHOLD": [0.8],
+    "GROWTH_FACTOR": [1.0],
+    "PRESSURE_WEIGHT": [40.0]
+  },
+  "sdks": {
+    "dotnet": {
+      "path": "../dotnet-client",
+      "command": "dotnet run -- {url} {iterations} {test_type} {unique_values} {topic_value_size} {message_queue_size} {total_topics}"
+    }
+  },
   "parameters": {
-    "test_type": [2],
-    "iterations": [1000000, 5000000, 10000000, 50000000],
-    "unique_values": [1],
-    "topic_value_size": [250, 500],
-    "message_queue_size": [10000, 100000, 1000000],
-    "total_topics": [100, 1000]
+    "sdk": [
+      "dotnet"
+    ],
+    "test_type": [
+      2
+    ],
+    "iterations": [
+      1000000,
+      5000000,
+      25000000
+    ],
+    "unique_values": [
+      1
+    ],
+    "topic_value_size": [
+      250,
+      500,
+      2000
+    ],
+    "message_queue_size": [
+      10000,
+      100000,
+      1000000
+    ],
+    "total_topics": [
+      1000
+    ]
   },
   "results": {
     "update_rate": {

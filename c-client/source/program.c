@@ -10,7 +10,7 @@
 
 void usage(char *executable_name)
 {
-    printf("%s <url> <test_number> <iterations> [<total_unique_topic_values> [<topic_value_size> [<message_queue_size> [<total_topics>]]]]\n", executable_name);
+    printf("%s <url> <iterations> <test_number> [<total_unique_topic_values> [<topic_value_size> [<message_queue_size> [<total_topics>]]]]\n", executable_name);
     printf("Available test numbers:\n");
     printf("    2 - Add and set all topics\n");
     printf("\n");
@@ -71,14 +71,24 @@ int main(int argc, char *argv[])
 
     // required parameters
     const char *url = argv[1];
-    const long test_number = get_required_parameter_long(2, "test_number", argv);
-    const long iterations = get_required_parameter_long(3, "iterations", argv);
+    const long iterations = get_required_parameter_long(2, "iterations", argv);
+    const long test_number = get_required_parameter_long(3, "test_number", argv);
 
     // optional parameters
     const long total_unique_topic_values = get_optional_parameter_long(4, "total_unique_topic_values", 1, argc, argv);
     const long topic_value_size = get_optional_parameter_long(5, "topic_value_size", 250, argc, argv);
     const long message_queue_size = get_optional_parameter_long(6, "message_queue_size", 10000, argc, argv);
     const long total_topics = get_optional_parameter_long(7, "total_topics", 100, argc, argv);
+
+    // Print parameters
+    printf("Parameters used in test:\n");
+    printf("- url: %s\n", url);
+    printf("- iterations: %ld\n", iterations);
+    printf("- test number: %ld\n", test_number);
+    printf("- total unique topic values: %ld\n", total_unique_topic_values);
+    printf("- topic value size: %ld\n", topic_value_size);
+    printf("- message queue size: %ld\n", message_queue_size);
+    printf("- total topics: %ld\n", total_topics);
 
     //
     char *root_topic_path = "test/set/c";

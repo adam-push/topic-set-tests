@@ -15,7 +15,9 @@ import com.pushtechnology.diffusion.datatype.binary.impl.BinaryDataTypeImpl;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,7 +28,7 @@ public class TopicSetTest {
             throws Exception {
 
         if (args.length < 3) {
-            System.out.println("Supply Diffusion server URL, the number of iterations and the test to be run [1-3], e.g. ws://localhost:8080 100000 1");
+            System.out.println("<url> <iterations> <test_number> [<total_unique_topic_values> [<topic_value_size> [<message_queue_size> [<total_topics>]]]]");
             System.exit(1);
         }
 
@@ -34,13 +36,62 @@ public class TopicSetTest {
         final int iterations = Integer.parseInt(args[1]);
         final int testID = Integer.parseInt(args[2]);
 
+        int totalUniqueTopicValues = 1;
+        if (args.length >= 4) {
+            totalUniqueTopicValues = Integer.parseInt(args[3]);
+        }
+
+        int topicValueSize = 250;
+        if (args.length >= 5) {
+            topicValueSize = Integer.parseInt(args[4]);
+        }
+
+        int messageQueueSize = 10000;
+        if (args.length >= 6) {
+            messageQueueSize = Integer.parseInt(args[5]);
+        }
+
+        int totalTopics = 100;
+        if (args.length >= 7) {
+            totalTopics = Integer.parseInt(args[6]);
+        }
+
+        System.out.println("Parameters used in test:");
+        System.out.println("- url: " + url);
+        System.out.println("- iterations: " + iterations);
+        System.out.println("- test number: " + testID);
+        System.out.println("- total unique topic values: " + totalUniqueTopicValues);
+        System.out.println("- topic value size: " + topicValueSize);
+        System.out.println("- message queue size: " + messageQueueSize);
+        System.out.println("- total topics: " + totalTopics);
+
+        final String rootTopicPath = "test/set/java";
+
+        List<Binary> topicValues = new ArrayList<Binary>();
+        // generate random topic values
+        Random randomGenerator = new Random();
+        for(long i = 0; i < totalUniqueTopicValues; i++) {
+            byte[] randomData = new byte[topicValueSize];
+            randomGenerator.nextBytes(randomData);
+            topicValues.add(binary.readValue(randomData));
+        }
+
         Session session = Diffusion.sessions()
                 .principal("admin")
                 .password("password")
+                .maximumQueueSize(messageQueueSize)
                 .open(url);
 
         if (session != null && session.getState() == Session.State.CONNECTED_ACTIVE) {
-            onConnected(session, iterations, testID);
+            onConnected(
+                session,
+                rootTopicPath,
+                iterations,
+                totalTopics,
+                totalUniqueTopicValues,
+                topicValues,
+                testID
+            );
             System.out.println("Done.");
             session.close();
         }
@@ -50,57 +101,70 @@ public class TopicSetTest {
     }
 
     protected static void onConnected(Session session,
+                                      String rootTopicPath,
                                       int iterations,
+                                      int numTopics,
+                                      int totalUniqueTopicValues,
+                                      List<Binary> topicValues,
                                       int testID)
             throws Exception {
 
         TopicUpdate topicUpdate = session.feature(TopicUpdate.class);
         TopicControl topicControl = session.feature(TopicControl.class);
 
-        final int numTopics = 100;
         TopicSpecification spec = Diffusion.newTopicSpecification(TopicType.BINARY)
                 .withProperty(TopicSpecification.PUBLISH_VALUES_ONLY, "true");
-        String topicPath = "test/set/java"; // + "/" + System.currentTimeMillis();
-
-        System.out.println(format("Topic name: %s", topicPath));
-        System.out.println(format("Test will run for %s iterations", iterations));
 
         long startTime = System.currentTimeMillis();
 
         switch(testID) {
             case 1:
                 System.out.println("Test 1 - Add topics, then time how long it takes to set() them");
-                addAllTopics(topicControl, spec, topicPath, numTopics).get();
+                addAllTopics(topicControl, spec, rootTopicPath, numTopics).get();
                 // Reset the clock once the topics have been created
                 startTime = System.currentTimeMillis();
-                setAllTopics(topicUpdate, topicPath, numTopics, iterations).get();
+                setAllTopics(topicUpdate, rootTopicPath, numTopics, iterations, topicValues).get();
                 break;
             case 2:
                 System.out.println("Test 2 - Do addAndSet()");
-                addAndSetAllTopics(topicUpdate, topicControl, spec, topicPath, numTopics, iterations).get();
+                addAndSetAllTopics(
+                    topicUpdate,
+                    topicControl,
+                    spec,
+                    rootTopicPath,
+                    numTopics,
+                    iterations,
+                    topicValues).get();
                 break;
             case 3:
                 System.out.println("Test 3 - Use an UpdateStream to add the topic if it doesn't exist and subsequently stream them.");
-                streamAllTopics(topicUpdate, spec, topicPath, numTopics, iterations).get();
+                streamAllTopics(topicUpdate, spec, rootTopicPath, numTopics, iterations, topicValues).get();
                 break;
             case 4:
                 System.out.println("Test 4 - Reuse existing topics, timing how long it takes to set() them");
-                setAllTopics(topicUpdate, topicPath, numTopics, iterations).get();
+                setAllTopics(topicUpdate, rootTopicPath, numTopics, iterations, topicValues).get();
                 break;
             default:
                 System.out.println("Unknown test " + testID);
                 return;
         }
 
-        final long totalTime = System.currentTimeMillis();
-        System.out.println("Published " + iterations + " messages to 100 topics in " + (totalTime - startTime) + "ms");
-        System.out.println("Average rate was " + ((double)iterations / (totalTime - startTime) * 1000) + " msgs/s");
+        final long elapsedTime = System.currentTimeMillis() - startTime;
+        final double updatesPerSecond = ((double)iterations * 1000) / elapsedTime;
+        final long roundedUpdateRate = new Double(updatesPerSecond).longValue();
+        System.out.println("Test took " + elapsedTime + " ms.");
+        System.out.println("Average Update Rate = " + roundedUpdateRate + " updates/s");
     }
 
-    private static CompletableFuture<Boolean> addAllTopics(TopicControl topicControl, TopicSpecification spec, String topicPath, int numTopics) {
+    private static CompletableFuture<Boolean> addAllTopics(
+            TopicControl topicControl,
+            TopicSpecification spec,
+            String topicPath, int
+            numTopics)
+            {
         CompletableFuture future = new CompletableFuture<Void>();
 
-        var results = new ArrayList<CompletableFuture<AddTopicResult>>();
+        List<CompletableFuture<AddTopicResult>> results = new ArrayList<CompletableFuture<AddTopicResult>>();
 
         for (int i = 0; i < numTopics; i++) {
             String topic = topicPath + "/" + i;
@@ -119,22 +183,22 @@ public class TopicSetTest {
 
     private static CompletableFuture<Boolean> setAllTopics(
             TopicUpdate topicUpdate,
-            String topicPath,
+            String rootTopicPath,
             int numTopics,
-            int iterations) {
-        CompletableFuture future = new CompletableFuture<Boolean>();
+            int iterations,
+            List<Binary> topicValues) {
 
+        CompletableFuture future = new CompletableFuture<Boolean>();
         AtomicInteger completedPublicationTasks = new AtomicInteger();
 
         for (int i = 0; i < iterations; i++) {
-            String topic = topicPath + "/" + (i % numTopics);
-            String data = "" + System.nanoTime() + "XXXXXX" + "ABCDEFHIJ".repeat(20);
+            String topicPath = rootTopicPath + "/" + (i % numTopics);
+            Binary dataValue = topicValues.get(i % topicValues.size());
 
-            Binary dataValue = binary.readValue(data.getBytes());
-            topicUpdate.set(topic, Binary.class, dataValue)
+            topicUpdate.set(topicPath, Binary.class, dataValue)
                     .whenComplete((ok, ex) -> {
                         if (ex != null) {
-                            System.out.println("Exception publishing to " + topic + " :" + ex.getMessage());
+                            System.out.println("Exception publishing to " + topicPath + " :" + ex.getMessage());
                         } else {
                             if (completedPublicationTasks.getAndIncrement() == iterations - 1) {
                                 System.out.println("All publication tasks complete");
@@ -143,7 +207,6 @@ public class TopicSetTest {
                         }
                     });
         }
-
         return future;
     }
 
@@ -151,48 +214,41 @@ public class TopicSetTest {
             TopicUpdate topicUpdate,
             TopicControl topicControl,
             TopicSpecification spec,
-            String topicPath,
+            String rootTopicPath,
             int numTopics,
-            int iterations)
-            throws Exception {
+            int iterations,
+            List<Binary> topicValues) throws Exception {
 
         CompletableFuture future = new CompletableFuture<Boolean>();
 
         AtomicInteger completedPublicationTasks = new AtomicInteger();
 
         for (int i = 0; i < iterations; i++) {
-            String topic = topicPath + "/" + (i % numTopics);
+            String topicPath = rootTopicPath + "/" + (i % numTopics);
+            Binary dataValue = topicValues.get(i % topicValues.size());
 
-            String data = "" + System.nanoTime() + "XXXXXX" + "ABCDEFGHI".repeat(20);
-            Binary dataValue = binary.readValue(data.getBytes());
-
-            topicUpdate.addAndSet(
-                            topic,
-                            spec,
-                            Binary.class,
-                            dataValue)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            System.out.println("Exception publishing to " + topic + " :" + ex.getMessage());
-                        }
-                        if (completedPublicationTasks.getAndIncrement() == iterations - 1) {
-                            System.out.println("All publication tasks complete.");
-                            future.complete(true);
-                        }
-                    });
-
+            topicUpdate
+                .addAndSet(topicPath, spec, Binary.class, dataValue)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        System.out.println("Exception publishing to " + topicPath + " :" + ex.getMessage());
+                    }
+                    if (completedPublicationTasks.getAndIncrement() == iterations - 1) {
+                        System.out.println("All publication tasks complete.");
+                        future.complete(true);
+                    }
+                });
         }
-
         return future;
     }
 
     private static CompletableFuture<Boolean> streamAllTopics(
             TopicUpdate topicUpdate,
             TopicSpecification spec,
-            String topicPath,
+            String rootTopicPath,
             int numTopics,
-            int iterations)
-            throws Exception {
+            int iterations,
+            List<Binary> topicValues) throws Exception {
 
         CompletableFuture future = new CompletableFuture<Boolean>();
 
@@ -202,21 +258,19 @@ public class TopicSetTest {
 
         // Create update streams for each topic
         for (int i = 0; i < iterations; i++) {
-            String topic = topicPath + "/" + (i % numTopics);
+            String topicPath = rootTopicPath + "/" + (i % numTopics);
+            Binary dataValue = topicValues.get(i % topicValues.size());
 
-            String data = "" + System.nanoTime() + "XXXXXX" + "ABCDEFGHI".repeat(20);
-            Binary dataValue = binary.readValue(data.getBytes());
-
-            UpdateStream stream = streams.get(topic);
+            UpdateStream stream = streams.get(topicPath);
             if (stream == null) {
-                stream = topicUpdate.createUpdateStream(topic, spec, Binary.class);
-                streams.put(topic, stream);
+                stream = topicUpdate.createUpdateStream(topicPath, spec, Binary.class);
+                streams.put(topicPath, stream);
             }
 
             stream.set(dataValue)
                     .whenComplete((ok, ex) -> {
                         if (ex != null) {
-                            System.out.println("Exception publishing to " + topic + " :" + ex);
+                            System.out.println("Exception publishing to " + topicPath + " :" + ex);
                         }
                         if (completedPublicationTasks.getAndIncrement() == iterations - 1) {
                             System.out.println("All publication tasks complete.");
@@ -224,7 +278,6 @@ public class TopicSetTest {
                         }
                     });
         }
-
         return future;
     }
 }

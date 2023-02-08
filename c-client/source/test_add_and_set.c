@@ -55,6 +55,7 @@ long test_add_and_set(
     long elapsed_time_ms = elapsed_time_ns / 1000000.0;
 
     // cleanup
+    clear_root_topic_path(session, root_topic_path);
     topic_specification_free(topic_specification);
 
     return elapsed_time_ms;

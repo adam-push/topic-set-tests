@@ -14,6 +14,14 @@
     <revisionCiBuildPrefix>-</revisionCiBuildPrefix>
     <revisionCiBuild>${ciBuild}</revisionCiBuild>
 
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <java.version>11</java.version>
+    <maven.compiler.source>${java.version}</maven.compiler.source>
+    <maven.compiler.target>${java.version}</maven.compiler.target>
+
+    <diffusion-client.version>6.9.0</diffusion-client.version>
+
     <sha1>DEVELOPER</sha1>
     <revisionSha1Prefix>.</revisionSha1Prefix>
     <revisionSha1>${sha1}</revisionSha1>

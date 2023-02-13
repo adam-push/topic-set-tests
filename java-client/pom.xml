@@ -27,19 +27,13 @@
     <revisionSha1>${sha1}</revisionSha1>
 
     <changelist>-SNAPSHOT</changelist>
+    <sdkVersion>-${diffusion-client.version}</sdkVersion>
     <revisionChangelist>${changelist}</revisionChangelist>
 
     <revision>
-      ${semanticVersion}${revisionCiBuildPrefix}${revisionCiBuild}${revisionSha1Prefix}${revisionSha1}${revisionChangelist}
+      ${semanticVersion}${revisionCiBuildPrefix}${revisionCiBuild}${revisionSha1Prefix}${revisionSha1}${revisionChangelist}${sdkVersion}
     </revision>
 
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-    <java.version>11</java.version>
-    <maven.compiler.source>${java.version}</maven.compiler.source>
-    <maven.compiler.target>${java.version}</maven.compiler.target>
-
-    <diffusion-client.version>6.8.3</diffusion-client.version>
   </properties>
 
   <repositories>
